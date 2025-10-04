@@ -87,7 +87,19 @@ class PredictionService:
     """Service class for handling predictions"""
     
     def __init__(self, data_path: str = "./data/"):
-        self.data_path = data_path
+        # Get absolute path to data directory
+        import os
+        if not os.path.isabs(data_path):
+            # Get the directory where this script is located
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            self.data_path = os.path.join(script_dir, data_path)
+        else:
+            self.data_path = data_path
+        
+        # Ensure data path ends with /
+        if not self.data_path.endswith('/'):
+            self.data_path += '/'
+        
         self.result_model = None
         self.goals_model = None
         self.feature_names = None
@@ -95,24 +107,51 @@ class PredictionService:
         
     def load_models(self, model_version: str = "v2_enhanced"):
         """Load trained models and data"""
+        import os
+        
+        logger.info(f"Attempting to load models from: {self.data_path}")
+        
+        # Check if data directory exists
+        if not os.path.exists(self.data_path):
+            logger.error(f"Data directory not found: {self.data_path}")
+            return False
+        
+        # List files in data directory for debugging
+        logger.info(f"Files in data directory: {os.listdir(self.data_path)}")
+        
         try:
             # Load models
             result_filename = f"{self.data_path}euro24_results_{model_version}.joblib"
             goals_filename = f"{self.data_path}euro24_goals_{model_version}.joblib"
             feature_filename = f"{self.data_path}feature_names_{model_version}.joblib"
+            team_stats_filename = f"{self.data_path}euro24_qualifiers_norm.csv"
+            
+            # Check if all required files exist
+            required_files = [result_filename, goals_filename, feature_filename, team_stats_filename]
+            missing_files = [f for f in required_files if not os.path.exists(f)]
+            
+            if missing_files:
+                logger.error(f"Missing required files: {missing_files}")
+                return False
+            
+            logger.info(f"Loading models: {result_filename}, {goals_filename}, {feature_filename}")
             
             self.result_model = joblib.load(result_filename)
             self.goals_model = joblib.load(goals_filename)
             self.feature_names = joblib.load(feature_filename)
             
             # Load team statistics
-            self.team_stats = pd.read_csv(f'{self.data_path}euro24_qualifiers_norm.csv', index_col=0)
+            logger.info(f"Loading team statistics: {team_stats_filename}")
+            self.team_stats = pd.read_csv(team_stats_filename)
             
             logger.info(f"Successfully loaded {model_version} models and data")
+            logger.info(f"Team stats shape: {self.team_stats.shape}")
+            logger.info(f"Available teams: {self.team_stats['team_name'].tolist() if 'team_name' in self.team_stats.columns else 'team_name column not found'}")
             return True
             
         except Exception as e:
             logger.error(f"Error loading models: {str(e)}")
+            logger.error(f"Exception type: {type(e).__name__}")
             # Try to load original models as fallback
             try:
                 result_filename = f"{self.data_path}euro20_results.joblib"
